@@ -1,5 +1,7 @@
 name: Android APK CI
 
+# CI trigger: validate the 8.3.18 release build on branch updates.
+
 on:
   push:
     branches:
