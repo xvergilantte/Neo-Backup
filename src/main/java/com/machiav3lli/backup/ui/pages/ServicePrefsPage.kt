@@ -369,3 +369,7 @@ val pref_installationPackage = StringPref(
     icon = Phosphor.Textbox,
     defaultValue = SystemUtils.packageName
 )
+
+
+/** Ensures Service preferences are registered before settings export/import. */
+fun initializeServicePreferencesForTransfer() = Unit
