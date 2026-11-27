@@ -513,4 +513,14 @@
     <string name="schedule_not_found_or_disabled">Schedule not found or disabled</string>
     <string name="setup_FORMAT">Setup: %s</string>
     <string name="permissions">Permissions</string>
+
+    <string name="prefs_exportsettings">Export settings</string>
+    <string name="prefs_exportsettings_summary">Save app settings to a file. Encryption mode, passwords and keys are excluded.</string>
+    <string name="prefs_importsettings">Import settings</string>
+    <string name="prefs_importsettings_summary">Restore app settings from a previously exported file.</string>
+    <string name="settings_exported">Settings exported</string>
+    <string name="settings_export_failed">Failed to export settings</string>
+    <string name="settings_imported">Settings imported</string>
+    <string name="settings_import_failed">Failed to import settings</string>
+    <string name="settings_import_nofile">No settings file selected</string>
 </resources>

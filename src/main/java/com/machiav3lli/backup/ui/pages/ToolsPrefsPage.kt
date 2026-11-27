@@ -3,6 +3,8 @@ package com.machiav3lli.backup.ui.pages
 import android.annotation.SuppressLint
 import android.content.Context
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -27,11 +29,15 @@ import androidx.compose.ui.unit.dp
 import com.machiav3lli.backup.DamagedOp
 import com.machiav3lli.backup.DialogMode
 import com.machiav3lli.backup.NeoApp
+import com.machiav3lli.backup.PREFS_EXTENSION
+import com.machiav3lli.backup.PREFS_MIME_ARRAY
+import com.machiav3lli.backup.PREFS_MIME_TYPE
 import com.machiav3lli.backup.R
 import com.machiav3lli.backup.data.entity.LinkPref
 import com.machiav3lli.backup.data.entity.Package
 import com.machiav3lli.backup.data.entity.Pref
 import com.machiav3lli.backup.data.entity.SortFilterModel
+import com.machiav3lli.backup.data.preferences.NeoPrefs
 import com.machiav3lli.backup.manager.handler.BackupRestoreHelper
 import com.machiav3lli.backup.manager.handler.findBackups
 import com.machiav3lli.backup.manager.handler.showNotification
@@ -40,6 +46,7 @@ import com.machiav3lli.backup.ui.compose.component.LaunchPreference
 import com.machiav3lli.backup.ui.compose.component.PrefsGroup
 import com.machiav3lli.backup.ui.compose.icons.Phosphor
 import com.machiav3lli.backup.ui.compose.icons.phosphor.AndroidLogo
+import com.machiav3lli.backup.ui.compose.icons.phosphor.ArrowsClockwise
 import com.machiav3lli.backup.ui.compose.icons.phosphor.Broom
 import com.machiav3lli.backup.ui.compose.icons.phosphor.Bug
 import com.machiav3lli.backup.ui.compose.icons.phosphor.CalendarX
@@ -52,17 +59,76 @@ import com.machiav3lli.backup.ui.dialogs.BaseDialog
 import com.machiav3lli.backup.ui.navigation.NavRoute
 import com.machiav3lli.backup.utils.BACKUP_DATE_TIME_FORMATTER
 import com.machiav3lli.backup.utils.SystemUtils
+import com.machiav3lli.backup.utils.currentTimestamp
 import com.machiav3lli.backup.utils.applyFilter
 import com.machiav3lli.backup.utils.extensions.koinNeoViewModel
 import com.machiav3lli.backup.viewmodels.HomeVM
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import timber.log.Timber
+import org.koin.java.KoinJavaComponent.get
 import java.io.BufferedOutputStream
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.time.LocalDateTime
+
+
+private val neoPrefs: NeoPrefs by lazy { get(NeoPrefs::class.java) }
+
+private val unexportableLegacyPreferenceKeys = setOf(
+    "mode",
+    "encryption.mode",
+    "password",
+    "pgpKey",
+    "pgpPasscode",
+    "enc",
+    "srv.enc",
+)
+
+private fun NeoPrefs.exportSettingsToJson(): String {
+    val legacyPreferences = Pref.fromSimpleFormat(Pref.preferencesToSerialized())
+        .filterKeys { it !in unexportableLegacyPreferenceKeys }
+    val root = buildJsonObject {
+        put("version", JsonPrimitive(1))
+        put("neoPrefs", Json.decodeFromString(JsonElement.serializer(), exportToJson()))
+        put("legacyPrefs", JsonPrimitive(Pref.toSimpleFormat(legacyPreferences)))
+    }
+    return Json.encodeToString(JsonElement.serializer(), root)
+}
+
+private suspend fun NeoPrefs.importSettingsFromJson(content: String) {
+    val root = Json.decodeFromString(JsonElement.serializer(), content) as? JsonObject
+        ?: throw IllegalArgumentException("Invalid settings file")
+    val version = root["version"]?.jsonPrimitive?.intOrNull
+    if (version != 1) throw IllegalArgumentException("Unsupported settings file version")
+
+    val neoPreferences = root["neoPrefs"]
+        ?: throw IllegalArgumentException("Missing NeoPrefs section")
+    importFromJson(Json.encodeToString(JsonElement.serializer(), neoPreferences))
+
+    val legacyContent = root["legacyPrefs"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    if (legacyContent.isNotBlank()) {
+        val allowedKeys = publicPreferences().map { it.key }
+            .filterNot { it in unexportableLegacyPreferenceKeys }
+            .toSet()
+        val legacyPreferences = Pref.fromSimpleFormat(legacyContent)
+            .filterKeys { it in allowedKeys }
+        if (legacyPreferences.isNotEmpty()) {
+            Pref.preferencesFromSerialized(Pref.toSimpleFormat(legacyPreferences))
+        }
+    }
+}
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
 @Composable
@@ -79,6 +145,69 @@ fun ToolsPrefsPage(
     }
     val mainState by viewModel.state.collectAsState()
     val tagsMap by viewModel.tagsMap.collectAsState()
+
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) {
+            snackbarHostState.show(
+                coroutineScope,
+                context.getString(R.string.settings_import_nofile),
+            )
+        } else {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val content = context.contentResolver.openInputStream(uri)
+                        ?.bufferedReader()
+                        ?.use { it.readText() }
+                        ?: throw IOException("Unable to read settings file")
+                    neoPrefs.importSettingsFromJson(content)
+                    snackbarHostState.show(
+                        coroutineScope,
+                        context.getString(R.string.settings_imported),
+                    )
+                } catch (e: Exception) {
+                    Timber.e("importSettings failed: $e")
+                    snackbarHostState.show(
+                        coroutineScope,
+                        context.getString(R.string.settings_import_failed),
+                    )
+                }
+            }
+        }
+    }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(PREFS_MIME_TYPE)
+    ) { uri ->
+        if (uri == null) {
+            snackbarHostState.show(
+                coroutineScope,
+                context.getString(R.string.settings_export_failed),
+            )
+        } else {
+            coroutineScope.launch(Dispatchers.IO) {
+                try {
+                    val content = neoPrefs.exportSettingsToJson()
+                    context.contentResolver.openOutputStream(uri)?.use { output ->
+                        output.write(content.toByteArray(StandardCharsets.UTF_8))
+                    } ?: throw IOException("Unable to write settings file")
+                    snackbarHostState.show(
+                        coroutineScope,
+                        context.getString(R.string.settings_exported),
+                    )
+                } catch (e: Exception) {
+                    Timber.e("exportSettings failed: $e")
+                    snackbarHostState.show(
+                        coroutineScope,
+                        context.getString(R.string.settings_export_failed),
+                    )
+                }
+            }
+        }
+    }
+
 
     val prefs = Pref.prefGroups["tool"] ?: listOf()
 
@@ -157,6 +286,12 @@ fun ToolsPrefsPage(
                                 )
 
                                 pref_schedulesExportImport -> neoActivity.moveTo(NavRoute.Exports)
+
+                                pref_exportSettings -> exportLauncher.launch(
+                                    "NB_${currentTimestamp}.${PREFS_EXTENSION}"
+                                )
+
+                                pref_importSettings -> importLauncher.launch(PREFS_MIME_ARRAY)
 
                                 pref_saveAppsList          -> context.onClickSaveAppsList(
                                     mainState.packages,
@@ -412,6 +547,20 @@ private fun Context.onClickCopySelf(
         return true
     }
 }
+
+val pref_exportSettings = LinkPref(
+    key = "tool.exportSettings",
+    titleId = R.string.prefs_exportsettings,
+    summaryId = R.string.prefs_exportsettings_summary,
+    icon = Phosphor.FloppyDisk,
+)
+
+val pref_importSettings = LinkPref(
+    key = "tool.importSettings",
+    titleId = R.string.prefs_importsettings,
+    summaryId = R.string.prefs_importsettings_summary,
+    icon = Phosphor.ArrowsClockwise,
+)
 
 val pref_schedulesExportImport = LinkPref(
     key = "tool.schedulesExportImport",

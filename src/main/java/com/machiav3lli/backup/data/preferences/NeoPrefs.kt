@@ -58,6 +58,14 @@ import com.machiav3lli.backup.utils.restartApp
 import com.machiav3lli.backup.utils.setBackupDir
 import com.machiav3lli.backup.utils.setCustomTheme
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import com.machiav3lli.backup.utils.defaultFromJson
+import com.machiav3lli.backup.utils.defaultToJson
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -476,6 +484,262 @@ class NeoPrefs private constructor(val context: Context) : KoinComponent {
         dataStoreKey = UserPrefKey.OLD_BACKUPS,
     )
 
+
+    private val unexportableKeys = setOf(
+        "encryption.mode",
+        "encryption.password",
+        "encryption.pgpKey",
+        "encryption.pgpPasscode",
+        "srv.enc",
+    )
+
+    private val exportableSettings: List<PrefSetting<*>> = listOf(
+        PrefSetting(
+            sortHome.key,
+            { sortHome.value },
+            { sortHome.set(it) },
+        ),
+        PrefSetting(
+            sortBackup.key,
+            { sortBackup.value },
+            { sortBackup.set(it) },
+        ),
+        PrefSetting(
+            sortRestore.key,
+            { sortRestore.value },
+            { sortRestore.set(it) },
+        ),
+        PrefSetting(
+            sortAscHome.key,
+            { sortAscHome.value },
+            { sortAscHome.set(it) },
+        ),
+        PrefSetting(
+            sortAscBackup.key,
+            { sortAscBackup.value },
+            { sortAscBackup.set(it) },
+        ),
+        PrefSetting(
+            sortAscRestore.key,
+            { sortAscRestore.value },
+            { sortAscRestore.set(it) },
+        ),
+        PrefSetting(
+            mainFilterHome.key,
+            { mainFilterHome.value },
+            { mainFilterHome.set(it) },
+        ),
+        PrefSetting(
+            mainFilterBackup.key,
+            { mainFilterBackup.value },
+            { mainFilterBackup.set(it) },
+        ),
+        PrefSetting(
+            mainFilterRestore.key,
+            { mainFilterRestore.value },
+            { mainFilterRestore.set(it) },
+        ),
+        PrefSetting(
+            backupFilterHome.key,
+            { backupFilterHome.value },
+            { backupFilterHome.set(it) },
+        ),
+        PrefSetting(
+            backupFilterBackup.key,
+            { backupFilterBackup.value },
+            { backupFilterBackup.set(it) },
+        ),
+        PrefSetting(
+            backupFilterRestore.key,
+            { backupFilterRestore.value },
+            { backupFilterRestore.set(it) },
+        ),
+        PrefSetting(
+            installedFilterHome.key,
+            { installedFilterHome.value },
+            { installedFilterHome.set(it) },
+        ),
+        PrefSetting(
+            installedFilterBackup.key,
+            { installedFilterBackup.value },
+            { installedFilterBackup.set(it) },
+        ),
+        PrefSetting(
+            installedFilterRestore.key,
+            { installedFilterRestore.value },
+            { installedFilterRestore.set(it) },
+        ),
+        PrefSetting(
+            launchableFilterHome.key,
+            { launchableFilterHome.value },
+            { launchableFilterHome.set(it) },
+        ),
+        PrefSetting(
+            launchableFilterBackup.key,
+            { launchableFilterBackup.value },
+            { launchableFilterBackup.set(it) },
+        ),
+        PrefSetting(
+            launchableFilterRestore.key,
+            { launchableFilterRestore.value },
+            { launchableFilterRestore.set(it) },
+        ),
+        PrefSetting(
+            updatedFilterHome.key,
+            { updatedFilterHome.value },
+            { updatedFilterHome.set(it) },
+        ),
+        PrefSetting(
+            updatedFilterBackup.key,
+            { updatedFilterBackup.value },
+            { updatedFilterBackup.set(it) },
+        ),
+        PrefSetting(
+            updatedFilterRestore.key,
+            { updatedFilterRestore.value },
+            { updatedFilterRestore.set(it) },
+        ),
+        PrefSetting(
+            latestFilterHome.key,
+            { latestFilterHome.value },
+            { latestFilterHome.set(it) },
+        ),
+        PrefSetting(
+            latestFilterBackup.key,
+            { latestFilterBackup.value },
+            { latestFilterBackup.set(it) },
+        ),
+        PrefSetting(
+            latestFilterRestore.key,
+            { latestFilterRestore.value },
+            { latestFilterRestore.set(it) },
+        ),
+        PrefSetting(
+            enabledFilterHome.key,
+            { enabledFilterHome.value },
+            { enabledFilterHome.set(it) },
+        ),
+        PrefSetting(
+            enabledFilterBackup.key,
+            { enabledFilterBackup.value },
+            { enabledFilterBackup.set(it) },
+        ),
+        PrefSetting(
+            enabledFilterRestore.key,
+            { enabledFilterRestore.value },
+            { enabledFilterRestore.set(it) },
+        ),
+        PrefSetting(
+            tagsFilterHome.key,
+            { tagsFilterHome.value },
+            { tagsFilterHome.set(it) },
+        ),
+        PrefSetting(
+            tagsFilterBackup.key,
+            { tagsFilterBackup.value },
+            { tagsFilterBackup.set(it) },
+        ),
+        PrefSetting(
+            tagsFilterRestore.key,
+            { tagsFilterRestore.value },
+            { tagsFilterRestore.set(it) },
+        ),
+        PrefSetting(
+            languages.key,
+            { languages.value },
+            { languages.set(it) },
+        ),
+        PrefSetting(
+            appTheme.key,
+            { appTheme.value },
+            { appTheme.set(it) },
+        ),
+        PrefSetting(
+            appAccentColor.key,
+            { appAccentColor.value },
+            { appAccentColor.set(it) },
+        ),
+        PrefSetting(
+            appSecondaryColor.key,
+            { appSecondaryColor.value },
+            { appSecondaryColor.set(it) },
+        ),
+        PrefSetting(
+            deviceLock.key,
+            { deviceLock.value },
+            { deviceLock.set(it) },
+        ),
+        PrefSetting(
+            biometricLock.key,
+            { biometricLock.value },
+            { biometricLock.set(it) },
+        ),
+        PrefSetting(
+            multilineInfoChips.key,
+            { multilineInfoChips.value },
+            { multilineInfoChips.set(it) },
+        ),
+        PrefSetting(
+            singularBackupRestore.key,
+            { singularBackupRestore.value },
+            { singularBackupRestore.set(it) },
+        ),
+        PrefSetting(
+            newAndUpdatedNotification.key,
+            { newAndUpdatedNotification.value },
+            { newAndUpdatedNotification.set(it) },
+        ),
+        PrefSetting(
+            squeezeNavText.key,
+            { squeezeNavText.value },
+            { squeezeNavText.set(it) },
+        ),
+        PrefSetting(
+            altNavBarItem.key,
+            { altNavBarItem.value },
+            { altNavBarItem.set(it) },
+        ),
+        PrefSetting(
+            altBackupDate.key,
+            { altBackupDate.value },
+            { altBackupDate.set(it) },
+        ),
+        PrefSetting(
+            altBlockLayout.key,
+            { altBlockLayout.value },
+            { altBlockLayout.set(it) },
+        ),
+        PrefSetting(
+            oldBackups.key,
+            { oldBackups.value },
+            { oldBackups.set(it) },
+        )
+    )
+
+    fun exportToJson(): String {
+        val obj = buildJsonObject {
+            for (setting in exportableSettings) {
+                if (setting.key in unexportableKeys) continue
+                put(setting.key, setting.toJsonErased(setting.getErased()))
+            }
+        }
+        return Json.encodeToString(JsonElement.serializer(), obj)
+    }
+
+    suspend fun importFromJson(json: String) {
+        val element = Json.decodeFromString(JsonElement.serializer(), json)
+        val obj = element as? JsonObject
+            ?: throw IllegalArgumentException("Invalid settings object")
+        for ((key, value) in obj) {
+            if (key in unexportableKeys) continue
+            exportableSettings.find { it.key == key }?.let { setting ->
+                setting.fromJsonErased(value)?.let { imported ->
+                    setting.setErased(imported)
+                }
+            }
+        }
+    }
+
     private fun onThemeChanged() {
         context.setCustomTheme()
         //recreateActivities()
@@ -578,5 +842,25 @@ class NeoPrefs private constructor(val context: Context) : KoinComponent {
                 },
             )
         }
+    }
+}
+
+private class PrefSetting<T : Any>(
+    val key: String,
+    private val get: () -> T,
+    private val set: suspend (T) -> Unit,
+    private val toJson: (T?) -> JsonElement = { defaultToJson(it) },
+    private val fromJson: (JsonElement) -> T? = { defaultFromJson(it) },
+) {
+    fun getErased(): Any = get()
+
+    @Suppress("UNCHECKED_CAST")
+    fun toJsonErased(value: Any): JsonElement = toJson(value as T)
+
+    fun fromJsonErased(element: JsonElement): Any? = fromJson(element)
+
+    @Suppress("UNCHECKED_CAST")
+    suspend fun setErased(value: Any) {
+        set(value as T)
     }
 }
