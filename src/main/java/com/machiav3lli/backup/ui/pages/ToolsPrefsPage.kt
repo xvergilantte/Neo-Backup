@@ -42,6 +42,7 @@ import com.machiav3lli.backup.manager.handler.BackupRestoreHelper
 import com.machiav3lli.backup.manager.handler.findBackups
 import com.machiav3lli.backup.manager.handler.showNotification
 import com.machiav3lli.backup.ui.activities.NeoActivity
+import com.machiav3lli.backup.ui.pages.initializeServicePreferencesForTransfer
 import com.machiav3lli.backup.ui.compose.component.LaunchPreference
 import com.machiav3lli.backup.ui.compose.component.PrefsGroup
 import com.machiav3lli.backup.ui.compose.icons.Phosphor
@@ -97,6 +98,7 @@ private val unexportableLegacyPreferenceKeys = setOf(
 )
 
 private fun NeoPrefs.exportSettingsToJson(): String {
+    initializeServicePreferencesForTransfer()
     val legacyPreferences = Pref.fromSimpleFormat(Pref.preferencesToSerialized())
         .filterKeys { it !in unexportableLegacyPreferenceKeys }
     val root = buildJsonObject {
@@ -108,6 +110,7 @@ private fun NeoPrefs.exportSettingsToJson(): String {
 }
 
 private suspend fun NeoPrefs.importSettingsFromJson(content: String) {
+    initializeServicePreferencesForTransfer()
     val root = Json.decodeFromString(JsonElement.serializer(), content) as? JsonObject
         ?: throw IllegalArgumentException("Invalid settings file")
     val version = root["version"]?.jsonPrimitive?.intOrNull
