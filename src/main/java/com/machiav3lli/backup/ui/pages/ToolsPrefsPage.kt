@@ -552,7 +552,7 @@ val pref_exportSettings = LinkPref(
     key = "tool.exportSettings",
     titleId = R.string.prefs_exportsettings,
     summaryId = R.string.prefs_exportsettings_summary,
-    icon = Phosphor.FloppyDisk,
+    icon = Phosphor.ListNumbers,
 )
 
 val pref_importSettings = LinkPref(
