@@ -276,14 +276,26 @@ open class Pref(
             //OABX.fromSerialized<Map<String, Any>>(serialized)
 
             synchronized(Pref) { prefTransactionRunning++ }
-            prefs.forEach { (key, value) ->
-                when (value) {
-                    is String  -> setPrefString(key, value)
-                    is Int     -> setPrefInt(key, value)
-                    is Boolean -> setPrefFlag(key, value)
+            try {
+                prefs.forEach { (key, value) ->
+                    // Update the registered preference itself so its in-memory state cache
+                    // stays in sync with SharedPreferences after an import.
+                    val pref = prefGroups.values.asSequence()
+                        .flatten()
+                        .firstOrNull { it.key == key }
+                        ?: return@forEach
+
+                    when (pref) {
+                        is EnumPref -> (value as? Int)?.let { pref.value = it }
+                        is ListPref -> (value as? String)?.let { pref.value = it }
+                        is StringPref -> (value as? String)?.let { pref.value = it }
+                        is BooleanPref -> (value as? Boolean)?.let { pref.value = it }
+                        is IntPref -> (value as? Int)?.let { pref.value = it }
+                    }
                 }
+            } finally {
+                synchronized(Pref) { prefTransactionRunning-- }
             }
-            synchronized(Pref) { prefTransactionRunning-- }
         }
     }
 }
