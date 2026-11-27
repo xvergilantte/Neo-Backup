@@ -63,6 +63,11 @@ const val ERROR_PREFIX = "${ADMIN_PREFIX}ERROR."
 
 const val PREFS_BACKUP_FILE = "${ADMIN_PREFIX}app.preferences"
 
+const val MAIN_MIME_TYPE = "application/octet-stream"
+const val PREFS_EXTENSION = "prfs"
+const val PREFS_MIME_TYPE = "application/vnd.neobackup.prfs"
+val PREFS_MIME_ARRAY = arrayOf(PREFS_MIME_TYPE, MAIN_MIME_TYPE)
+
 const val PROP_NAME = "properties"
 const val LOG_INSTANCE = "%s.log.txt"
 
